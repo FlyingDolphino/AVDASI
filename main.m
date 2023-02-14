@@ -58,16 +58,17 @@ ye = zeros(nSpan,1);
 ze = zeros(nSpan,1);
 GJ = zeros(nSpan,1);
 LD = zeros(nSpan,1);
+wingboxCenters = zeros(nSpan,4);
+stringerCenters = zeros(nSpan,8);
+
 
 %all inertia is calculated about 0,0 of the parameterizaition axes
 for n = 1:nSpan
 
     nodes = CS(n).WingBoxCornerXYZ;
-    translate = 0; %not used
-    nodes = nodes+translate;
     nodes(:,1) = [];        %only interested in the current box
-     
-    t = CS(n).tWeb;
+
+    t = CS(n).tSkin;
     ne = length(nodes);
     L = zeros(1,ne);
     y = zeros(1,ne);
@@ -90,9 +91,11 @@ for n = 1:nSpan
         if i ==ne
             y(i) = 1/2*(nodes(1,1)+nodes(i,1));
             z(i) = 1/2*(nodes(1,2)+nodes(i,2));
+            wingboxCenters(n,i) = y(i);
         else
             y(i) = 1/2*(nodes(i+1,1)+nodes(i,1));
             z(i) = 1/2*(nodes(i+1,2)+nodes(i,2));
+            wingboxCenters(n,i) = y(i);
         end
     end
     
@@ -117,24 +120,26 @@ for n = 1:nSpan
     Ls = zeros(1,ns);
     
     for i= 1:ns
-        a = stringerNodes{i}(1,:)+translate;
-        b = stringerNodes{i}(2,:)+translate;
+        a = stringerNodes{i}(1,:);
+        b = stringerNodes{i}(2,:);
         Ls(i) = norm(a-b);
         mid = (a+b)/2;
         ys(i) = mid(2);
-        zs(i)=mid(3);   
+        zs(i)=mid(3); 
+        stringerCenters(n,i) = ys(i);
     end
     
     %bottom stringer handling
     stringerNodes = CS(n).BotStringerXYZ;
     nsB = length(stringerNodes);
     for i= 5:ns+nsB
-        a = stringerNodes{i-4}(1,:)+translate;
-        b = stringerNodes{i-4}(2,:)+translate;
+        a = stringerNodes{i-4}(1,:);
+        b = stringerNodes{i-4}(2,:);
         Ls(i) = norm(a-b);
         mid = (a+b)/2;
         ys(i) = mid(2);
-        zs(i)=mid(3);   
+        zs(i)=mid(3);
+        stringerCenters(n,i) = ys(i);
     end
 
     
@@ -197,17 +202,75 @@ x = LoadData(:,1);
 lenx = length(x);
 aeroperL = LoadData(:,2);
 massperL = LoadData(:,3);
-Q = zeros(length(x),1);
-BM = zeros(length(x),1);
+Q = zeros(lenx,1);
+BM = zeros(lenx,1);
 
 %Q and BM distro
-for i = 1:lenx-1
-    Q(i) = -trapz(x(i:lenx),aeroperL(i:lenx))+trapz(x(i:lenx),massperL(i:lenx)*9.81*n);
-    BM(i) = -trapz(x(i:lenx),aeroperL(i:lenx).*x(i:lenx))+trapz(x(i:lenx),massperL(i:lenx)*9.81*n.*x(i:lenx));
+%wingbox is the contribution of the wingbox
+wingbox= zeros(nSpan,2);
+
+for i = 1:nSpan
+    xCoord = CS(i).WingBoxCornerXYZ;
+    wingbox(i,:) = [xCoord(1) LD(i)];
+    
 end
+
+wingboxL = spline(1:10,wingbox(:,2),x);
+
+
+for i = 1:lenx-1
+    Q(i) = -trapz(x(i:lenx),aeroperL(i:lenx))+trapz(x(i:lenx),(massperL(i:lenx)+wingboxL(i:lenx))*g*n);
+    BM(i) = -trapz(x(i:lenx),aeroperL(i:lenx).*x(i:lenx))+trapz(x(i:lenx),(massperL(i:lenx)+wingboxL(i:lenx))*g*n.*x(i:lenx));
+
+end
+
+    
 
 %% Step 3. Compute axial stresses caused by bending 
 
+BMspan = spline(x,BM,1:nSpan);
+stressX = zeros(nSpan,1); %the stress variation with x 
+for i = 1:nSpan
+    stressX(i) = (BM(i)/EIz(i));
+end
+
+%stress for each element now
+
+
+boxStress = zeros(nSpan,4);
+stringerStress = zeros(nSpan,8);
+
+for n = 1:nSpan
+    for i = 1:4
+        boxStress(n,i) = stressX(n)*wingboxCenters(n,i);
+    end
+    for j = 1:8
+        stringerStress(n,j) = stressX(n)*stringerCenters(n,j);
+    end
+end
+
+maxStress = zeros(nSpan,1);
+minStress = zeros(nSpan,1);
+
+for n = 1:nSpan
+    %min and max
+    maxBStress = max(boxStress(n,:),[],'all');
+    minBStress = min(boxStress(n,:),[],'all');
+    maxSStress = max(stringerStress(n,:),[],'all');
+    minSStress = min(stringerStress(n,:),[],'all');
+
+    if abs(maxBStress) > abs(maxSStress)
+        maxStress(n) = maxBStress;
+    else
+        maxStress(n) = maxSStress;
+    end
+
+    if abs(minBStress) > abs(minSStress)
+        minStress(n) = minSStress;
+    else
+        minStress(n) = minBStress;
+    end
+end
 
 %% Step 4. Compute failure caused by axial stresses
 % 4.1  Yield (element per element based on max sigma_xx)
