@@ -3,7 +3,7 @@ clear; close all; clc; format short g; format compact;
 set(0,'DefaultFigureWindowStyle','docked')
 
 nSpan = 10;     % number of span cross-section to model = number of ribs (constant)
-PLOT  = false;   % Boolean to turn plots on/off
+PLOT  = true;   % Boolean to turn plots on/off
 
 
 %% Setup 1: Material definitions for Aluminium
@@ -98,9 +98,7 @@ for n = 1:nSpan
             wingboxCenters(n,i) = y(i);
         end
     end
-    
-    
-    
+
     area = 0;
     Izz = 0;
     Iyy = 0;
@@ -197,10 +195,10 @@ LoadData = xlsread('Load.xlsx'); %#ok<XLSRD>
 
 
 g = 9.81;
-n = 1; %load factor
+loadFactor = 1; %load factor
 x = LoadData(:,1);
 lenx = length(x);
-aeroperL = LoadData(:,2);
+aeroperL = LoadData(:,2)*loadFactor;
 massperL = LoadData(:,3);
 Q = zeros(lenx,1);
 BM = zeros(lenx,1);
@@ -219,8 +217,8 @@ wingboxL = spline(1:10,wingbox(:,2),x);
 
 
 for i = 1:lenx-1
-    Q(i) = -trapz(x(i:lenx),aeroperL(i:lenx))+trapz(x(i:lenx),(massperL(i:lenx)+wingboxL(i:lenx))*g*n);
-    BM(i) = -trapz(x(i:lenx),aeroperL(i:lenx).*x(i:lenx))+trapz(x(i:lenx),(massperL(i:lenx)+wingboxL(i:lenx))*g*n.*x(i:lenx));
+    Q(i) = -trapz(x(i:lenx),aeroperL(i:lenx))+trapz(x(i:lenx),(massperL(i:lenx)+wingboxL(i:lenx))*g);
+    BM(i) = -trapz(x(i:lenx),aeroperL(i:lenx).*x(i:lenx))+trapz(x(i:lenx),(massperL(i:lenx)+wingboxL(i:lenx))*g.*x(i:lenx));
 
 end
 
@@ -242,10 +240,10 @@ stringerStress = zeros(nSpan,8);
 
 for n = 1:nSpan
     for i = 1:4
-        boxStress(n,i) = stressX(n)*wingboxCenters(n,i);
+        boxStress(n,i) = -E*stressX(n)*wingboxCenters(n,i);
     end
     for j = 1:8
-        stringerStress(n,j) = stressX(n)*stringerCenters(n,j);
+        stringerStress(n,j) = -E*stressX(n)*stringerCenters(n,j);
     end
 end
 
@@ -274,7 +272,31 @@ end
 
 %% Step 4. Compute failure caused by axial stresses
 % 4.1  Yield (element per element based on max sigma_xx)
+
+yield = 0;
+for n = 1:nSpan
+    for i = 1:4
+       if abs(boxStress(n,i))-276e10 >= 0
+           yield = 1;
+       end
+       
+    end
+    for j = 1:8
+        if abs(stringerStress(n,i))-276e10 >= 0
+            yield = 1;
+       end
+    end
+end
+
 % 4.2  Top and Bottom Skin Buckling
+L = 1;
+
+%need to calc radius of gyration 
+%find I for the panel
+
+
+
+
 % 4.3  Plate Buckling in between Stiffeners
 % 4.4  Stiffeners buckling as plates
 
