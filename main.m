@@ -290,19 +290,55 @@ end
 
 % 4.2  Top and Bottom Skin Buckling
 L = 1;
-
-%need to calc radius of gyration 
-%find I for the panel
-
-
+spCrit = zeros(nSpan,1);
+for n = 1:nSpan
+    nodes = CS(n).WingBoxCornerXYZ;
+    b = nodes(2,3)-nodes(1,3);
+    h = CS(n).tSkin;
+    abox  = b*h;
+    Ibox = b*(h^3)/12;
+    boxCenter = nodes(1,2);
+    
+    %stringer contribution
+    
+    nodes = CS(n).TopStringerXYZ{1};
+    b = CS(n).StringerThickness;
+    h = nodes(1,2)-nodes(2,2);
+    astring = b*h;
+    Istring = b*(h^3)/12;
+    stringerCenter = stringerCenters(n,1);
+    
+    %finding centroid of panel
+    centroid = ((boxCenter*abox)+4*(stringerCenter*astring))/(abox+astring*4);
+    
+    I = (Ibox + abox*(boxCenter-centroid)^2)+4*(Istring+astring*(centroid-stringerCenter));
+    r = (I/(abox+astring))^0.5;
+    spCrit(n) = pi^2*E/(L/r)^2;
+end
 
 
 % 4.3  Plate Buckling in between Stiffeners
+
+plateCrit = zeros(nSpan,1);
+for n = 1:nSpan
+    tsk = CS(n).tSkin;
+    bsk = CS(n).TopStringerXYZ{2}(1,3)-CS(n).TopStringerXYZ{1}(1,3);
+    plateCrit(n) = (4*pi^2*E)/(12*(1-nu^2)) * (tsk/bsk)^2;
+
+end
+
 % 4.4  Stiffeners buckling as plates
+
+stringerCrit = zeros(nSpan,1);
+for n = 1:nSpan
+    tst = CS(n).StringerThickness;
+    bst = CS(n).TopStringerXYZ{1}(1,2)-CS(n).TopStringerXYZ{1}(2,2);
+    stringerCrit(n) = (0.43*pi^2*E)/(12*(1-nu^2)) * (tst/bst)^2;
+end
+
 
 
 %% Step 5. Finite element model and wing deflections
-
 
 
 %% Step 6. Design the lightest wing that does not fail due to axial stresses, 
