@@ -3,7 +3,7 @@ clear; close all; clc; format short g; format compact;
 set(0,'DefaultFigureWindowStyle','docked')
 
 nSpan = 10;     % number of span cross-section to model = number of ribs (constant)
-PLOT  = true;   % Boolean to turn plots on/off
+PLOT  = false;   % Boolean to turn plots on/off
 
 
 %% Setup 1: Material definitions for Aluminium
@@ -60,6 +60,8 @@ GJ = zeros(nSpan,1);
 LD = zeros(nSpan,1);
 wingboxCenters = zeros(nSpan,4);
 stringerCenters = zeros(nSpan,8);
+ymax = zeros(nSpan,1);
+ymin = zeros(nSpan,1);
 
 
 %all inertia is calculated about 0,0 of the parameterizaition axes
@@ -67,7 +69,10 @@ for n = 1:nSpan
 
     nodes = CS(n).WingBoxCornerXYZ;
     nodes(:,1) = [];        %only interested in the current box
-
+    
+    
+    ymax(n) = max(nodes(:,1));
+    ymin(n) = min(nodes(:,1));
     t = CS(n).tSkin;
     ne = length(nodes);
     L = zeros(1,ne);
@@ -195,7 +200,7 @@ LoadData = xlsread('Load.xlsx'); %#ok<XLSRD>
 
 
 g = 9.81;
-loadFactor = 1; %load factor
+loadFactor = 2.5; %load factor
 x = LoadData(:,1);
 lenx = length(x);
 aeroperL = LoadData(:,2)*loadFactor;
@@ -215,78 +220,43 @@ end
 
 wingboxL = spline(1:10,wingbox(:,2),x);
 
+for i = 1:lenx-1
+    Q(i) = trapz(x(i:lenx),aeroperL(i:lenx))-trapz(x(i:lenx),(massperL(i:lenx)+wingboxL(i:lenx))*g);
+end
+
 
 for i = 1:lenx-1
-    Q(i) = -trapz(x(i:lenx),aeroperL(i:lenx))+trapz(x(i:lenx),(massperL(i:lenx)+wingboxL(i:lenx))*g);
-    BM(i) = -trapz(x(i:lenx),aeroperL(i:lenx).*x(i:lenx))+trapz(x(i:lenx),(massperL(i:lenx)+wingboxL(i:lenx))*g.*x(i:lenx));
-
+    BM(i) = trapz(x(i:lenx),Q(i:lenx));
 end
+
 
     
 
+
 %% Step 3. Compute axial stresses caused by bending 
-
-BMspan = spline(x,BM,1:nSpan);
-stressX = zeros(nSpan,1); %the stress variation with x 
-for i = 1:nSpan
-    stressX(i) = (BM(i)/EIz(i));
-end
-
-%stress for each element now
+sigma = zeros(nSpan,1);
+EIz = spline(1:nSpan,EIz,x);
+ymax = spline(1:nSpan,ymax,x);
+ymin = spline(1:nSpan,ymin,x);
 
 
-boxStress = zeros(nSpan,4);
-stringerStress = zeros(nSpan,8);
 
-for n = 1:nSpan
-    for i = 1:4
-        boxStress(n,i) = -E*stressX(n)*wingboxCenters(n,i);
-    end
-    for j = 1:8
-        stringerStress(n,j) = -E*stressX(n)*stringerCenters(n,j);
-    end
-end
+sigma = E*(BM./EIz);
+sigmaMax = sigma.*ymax;
+sigmaMin = sigma.*ymin;
 
-maxStress = zeros(nSpan,1);
-minStress = zeros(nSpan,1);
+yplot = linspace(ymin(1),ymax(1));
+sigmaVariation = yplot.*sigma(1);
 
-for n = 1:nSpan
-    %min and max
-    maxBStress = max(boxStress(n,:),[],'all');
-    minBStress = min(boxStress(n,:),[],'all');
-    maxSStress = max(stringerStress(n,:),[],'all');
-    minSStress = min(stringerStress(n,:),[],'all');
 
-    if abs(maxBStress) > abs(maxSStress)
-        maxStress(n) = maxBStress;
-    else
-        maxStress(n) = maxSStress;
-    end
 
-    if abs(minBStress) > abs(minSStress)
-        minStress(n) = minSStress;
-    else
-        minStress(n) = minBStress;
-    end
-end
+
+
 
 %% Step 4. Compute failure caused by axial stresses
 % 4.1  Yield (element per element based on max sigma_xx)
 
-yield = 0;
-for n = 1:nSpan
-    for i = 1:4
-       if abs(boxStress(n,i))-276e10 >= 0
-           yield = 1;
-       end
-       
-    end
-    for j = 1:8
-        if abs(stringerStress(n,i))-276e10 >= 0
-            yield = 1;
-       end
-    end
-end
+gyield = sigmaMax-276e6;
 
 % 4.2  Top and Bottom Skin Buckling
 L = 1;
@@ -336,9 +306,70 @@ for n = 1:nSpan
     stringerCrit(n) = (0.43*pi^2*E)/(12*(1-nu^2)) * (tst/bst)^2;
 end
 
+%check step
+spCrit = spline(1:nSpan,spCrit,x);
+plateCrit = spline(1:nSpan,plateCrit,x);
+stringerCrit = spline(1:nSpan,stringerCrit,x);
+
+gbuckling = [sigmaMax-spCrit, sigmaMax-plateCrit, sigmaMax-stringerCrit];
+
 
 
 %% Step 5. Finite element model and wing deflections
+
+%Will use the x coords given by the loadData as our nodes
+ne = lenx-1;    %number of elements
+nodes = x;
+Le = nodes(1)-nodes(2);
+eConn = zeros(ne,2);
+
+Ke = zeros(4,4,ne);
+
+for i = 1:ne
+    eConn(i,:) = [i i+1];
+end
+
+
+for i=1:ne
+    Ke(:,:,i) = EIz(i)/(Le^3)*[...
+       12   6*Le    -12     6*Le 
+       6*Le     4*Le^2  -6*Le   2*Le^2
+       -12  6*Le    12  -6*Le
+       6^Le     2*Le^2  -6*Le   4*Le^2]  ;
+end
+
+K = zeros(100,100); %50 nodes * 2DoFs
+
+for i=1:ne
+    nodeID     = eConn(i,:);                  % index of nodes linked to element i
+    id         = sort([nodeID*2-1 nodeID*2]); % index of dofs  linked to element i
+    K(id,id)   = K(id,id) + Ke(:,:,i);        % add stiffnes of element i to global stiffness matrix
+end
+
+%Forces and boundary conditions
+F = zeros(lenx*2,1);
+u = zeros(lenx*2,1);
+
+forcePerL = aeroperL - massperL;
+xInd = 1:2:100;
+   
+for i = 1:2:ne
+    
+    elementForce = forcePerL(i) + forcePerL(i+1);
+    forcePerNode = elementForce/2;
+    F(xInd(i))=forcePerNode;
+    F(xInd(i+1))=forcePerNode;
+end
+
+
+idBC = [1,2];
+idFree = [3:100];
+
+Kf          = K(idFree,idFree);
+Ff          = F(idFree);
+u(idFree)   = Kf^-1*Ff;          % displacement solution caused by F
+
+
 
 
 %% Step 6. Design the lightest wing that does not fail due to axial stresses, 
