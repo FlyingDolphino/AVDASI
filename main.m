@@ -3,7 +3,7 @@ clear; close all; clc; format short g; format compact;
 set(0,'DefaultFigureWindowStyle','docked')
 
 nSpan = 10;     % number of span cross-section to model = number of ribs (constant)
-PLOT  = false;   % Boolean to turn plots on/off
+PLOT  = true;   % Boolean to turn plots on/off
 
 
 %% Setup 1: Material definitions for Aluminium
@@ -46,9 +46,6 @@ x.StringerThickness = [0   0.003 ;
 % CS(2).tWeb
 CS = WingParameterisation(x,nSpan,PLOT); 
 
-
-
-
 %% Step 1. Discretised cross-sections and approximate cross-section properties 
 
 EA = zeros(nSpan,1);
@@ -59,19 +56,18 @@ ze = zeros(nSpan,1);
 GJ = zeros(nSpan,1);
 LD = zeros(nSpan,1);
 wingboxCenters = zeros(nSpan,4);
+wingboxZs = zeros(nSpan,4);
 stringerCenters = zeros(nSpan,8);
+stringerZs = zeros(nSpan,8);
 ymax = zeros(nSpan,1);
 ymin = zeros(nSpan,1);
 
-
-%all inertia is calculated about 0,0 of the parameterizaition axes
 for n = 1:nSpan
 
     nodes = CS(n).WingBoxCornerXYZ;
     nodes(:,1) = [];        %only interested in the current box
-    
-    
-    ymax(n) = max(nodes(:,1));
+
+    ymax(n) = max(nodes(:,1));          %max and min y values of each rib. Needed for max and min stresses later
     ymin(n) = min(nodes(:,1));
     t = CS(n).tSkin;
     ne = length(nodes);
@@ -81,8 +77,8 @@ for n = 1:nSpan
     tots = length(CS(n).TopStringerXYZ)+length(CS(n).BotStringerXYZ);
     ys = zeros(1,tots);
     zs = zeros(1,tots);
-    %length of each element
     
+    %length of each element in box
     for i = 1:ne
         if i ==ne
             L(i) = norm(nodes(1,:)-nodes(i,:));
@@ -91,16 +87,18 @@ for n = 1:nSpan
         end
     end
     
-    %midpoints
+    %midpoints of each box element
     for i = 1:ne
         if i ==ne
             y(i) = 1/2*(nodes(1,1)+nodes(i,1));
             z(i) = 1/2*(nodes(1,2)+nodes(i,2));
             wingboxCenters(n,i) = y(i);
+            wingboxZs(n,i) = z(i);
         else
             y(i) = 1/2*(nodes(i+1,1)+nodes(i,1));
             z(i) = 1/2*(nodes(i+1,2)+nodes(i,2));
             wingboxCenters(n,i) = y(i);
+            wingboxZs(n,i) = z(i);
         end
     end
 
@@ -108,28 +106,30 @@ for n = 1:nSpan
     Izz = 0;
     Iyy = 0;
 
-    for i =1:ne
+    %summing the area and Izz, Iyy contributions of the box
+    for i =1:ne                             
         area = area + t*L(i);
         Izz = Izz + y(i)^2.*t*L(i);
         Iyy = Iyy + z(i)^2.*t*L(i);
     end
     
     %top stringer handling
-    
     stringerNodes = CS(n).TopStringerXYZ;
-    
     ts = CS(n).StringerThickness;
     ns = length(stringerNodes);
     Ls = zeros(1,ns);
     
+    
+    
     for i= 1:ns
         a = stringerNodes{i}(1,:);
         b = stringerNodes{i}(2,:);
-        Ls(i) = norm(a-b);
-        mid = (a+b)/2;
-        ys(i) = mid(2);
-        zs(i)=mid(3); 
-        stringerCenters(n,i) = ys(i);
+        Ls(i) = norm(a-b); %length of each stringer
+        mid = (a+b)/2;      %midpoint of each stringer
+        ys(i) = mid(2);     %y coordinate of midpoint
+        zs(i)= mid(3);      %z coordinate of midpoint
+        stringerCenters(n,i) = ys(i);   %saves the y midpoints of each stringer, needed for later
+        stringerZs(n,i) = zs(i);
     end
     
     %bottom stringer handling
@@ -141,8 +141,9 @@ for n = 1:nSpan
         Ls(i) = norm(a-b);
         mid = (a+b)/2;
         ys(i) = mid(2);
-        zs(i)=mid(3);
+        zs(i)= mid(3);
         stringerCenters(n,i) = ys(i);
+        stringerZs(n,i) = zs(i);
     end
 
     
@@ -163,7 +164,6 @@ for n = 1:nSpan
     J = Izz + Iyy;
     
     
-%inertias were taken about P4 for each wing box
      EIy(n) = E*Iyy;
      EIz(n) = E*Izz;
      EA(n) = E*area;
@@ -187,26 +187,26 @@ for n = 1:nSpan
      %saving the elastic center (translated back to original coordinates)
      ye(n) = (1/EA(n))*yCS;
      ze(n) = (1/EA(n))*zCS;
-         
-    
-     
-    
-        
-    
+
 end
+
+
+
+
+
 
 %% Step 2. Wing loads, internal shear and bending moments
 LoadData = xlsread('Load.xlsx'); %#ok<XLSRD> 
 
 
 g = 9.81;
-loadFactor = 2.5; %load factor
+loadFactor = [-1,2.5]; %load factor
 x = LoadData(:,1);
 lenx = length(x);
-aeroperL = LoadData(:,2)*loadFactor;
+aeroperL = LoadData(:,2);
 massperL = LoadData(:,3);
-Q = zeros(lenx,1);
-BM = zeros(lenx,1);
+Q = zeros(lenx,length(loadFactor));
+BM = zeros(lenx,length(loadFactor));
 
 %Q and BM distro
 %wingbox is the contribution of the wingbox
@@ -220,13 +220,19 @@ end
 
 wingboxL = spline(1:10,wingbox(:,2),x);
 
+
+
 for i = 1:lenx-1
-    Q(i) = trapz(x(i:lenx),aeroperL(i:lenx))-trapz(x(i:lenx),(massperL(i:lenx)+wingboxL(i:lenx))*g);
+    for j = 1:length(loadFactor)
+        Q(i,j) = trapz(x(i:lenx),aeroperL(i:lenx)*loadFactor(j))-trapz(x(i:lenx),(massperL(i:lenx)+wingboxL(i:lenx))*g);
+    end
 end
 
 
 for i = 1:lenx-1
-    BM(i) = trapz(x(i:lenx),Q(i:lenx));
+    for j = 1:length(loadFactor)
+        BM(i,j) = -trapz(x(i:lenx),Q(i:lenx,j));
+    end
 end
 
 
@@ -234,15 +240,14 @@ end
 
 
 %% Step 3. Compute axial stresses caused by bending 
-sigma = zeros(nSpan,1);
 EIz = spline(1:nSpan,EIz,x);
 ymax = spline(1:nSpan,ymax,x);
 ymin = spline(1:nSpan,ymin,x);
 
 
 
-sigma = E*(BM./EIz);
-sigmaMax = sigma.*ymax;
+sigma = E*(BM./EIz); %normalized to y.
+sigmaMax = sigma(:,2).*ymax;
 sigmaMin = sigma.*ymin;
 
 yplot = linspace(ymin(1),ymax(1));
@@ -256,7 +261,7 @@ sigmaVariation = yplot.*sigma(1);
 %% Step 4. Compute failure caused by axial stresses
 % 4.1  Yield (element per element based on max sigma_xx)
 
-gyield = sigmaMax-276e6;
+gyield = abs(sigmaMax)-276e6;
 
 % 4.2  Top and Bottom Skin Buckling
 L = 1;
@@ -270,7 +275,6 @@ for n = 1:nSpan
     boxCenter = nodes(1,2);
     
     %stringer contribution
-    
     nodes = CS(n).TopStringerXYZ{1};
     b = CS(n).StringerThickness;
     h = nodes(1,2)-nodes(2,2);
@@ -280,7 +284,6 @@ for n = 1:nSpan
     
     %finding centroid of panel
     centroid = ((boxCenter*abox)+4*(stringerCenter*astring))/(abox+astring*4);
-    
     I = (Ibox + abox*(boxCenter-centroid)^2)+4*(Istring+astring*(centroid-stringerCenter));
     r = (I/(abox+astring))^0.5;
     spCrit(n) = pi^2*E/(L/r)^2;
@@ -307,11 +310,9 @@ for n = 1:nSpan
 end
 
 %check step
-spCrit = spline(1:nSpan,spCrit,x);
-plateCrit = spline(1:nSpan,plateCrit,x);
-stringerCrit = spline(1:nSpan,stringerCrit,x);
 
-gbuckling = [sigmaMax-spCrit, sigmaMax-plateCrit, sigmaMax-stringerCrit];
+sigmaMax = spline(x,sigmaMax,(1:nSpan).');
+gbuckling = [abs(sigmaMax)-spCrit, abs(sigmaMax)-plateCrit, abs(sigmaMax)-stringerCrit];
 
 
 
@@ -320,7 +321,7 @@ gbuckling = [sigmaMax-spCrit, sigmaMax-plateCrit, sigmaMax-stringerCrit];
 %Will use the x coords given by the loadData as our nodes
 ne = lenx-1;    %number of elements
 nodes = x;
-Le = nodes(1)-nodes(2);
+Le = nodes(2)-nodes(1);
 eConn = zeros(ne,2);
 
 Ke = zeros(4,4,ne);
@@ -332,9 +333,9 @@ end
 
 for i=1:ne
     Ke(:,:,i) = EIz(i)/(Le^3)*[...
-       12   6*Le    -12     6*Le 
-       6*Le     4*Le^2  -6*Le   2*Le^2
-       -12  6*Le    12  -6*Le
+       12   6*Le    -12     6*Le ;
+       6*Le     4*Le^2  -6*Le   2*Le^2 ;
+       -12  6*Le    12  -6*Le ;
        6^Le     2*Le^2  -6*Le   4*Le^2]  ;
 end
 
@@ -345,31 +346,51 @@ for i=1:ne
     id         = sort([nodeID*2-1 nodeID*2]); % index of dofs  linked to element i
     K(id,id)   = K(id,id) + Ke(:,:,i);        % add stiffnes of element i to global stiffness matrix
 end
-
 %Forces and boundary conditions
 F = zeros(lenx*2,1);
 u = zeros(lenx*2,1);
 
-forcePerL = aeroperL - massperL;
-xInd = 1:2:100;
-   
-for i = 1:2:ne
-    
-    elementForce = forcePerL(i) + forcePerL(i+1);
-    forcePerNode = elementForce/2;
-    F(xInd(i))=forcePerNode;
-    F(xInd(i+1))=forcePerNode;
+
+
+%distro load needs to change
+
+distroLoad = (aeroperL*loadFactor)-(massperL*g)-(wingboxL*g);
+
+
+pointLoads = zeros(lenx,1);
+for i = 1:2:lenx
+    for j = 1:2
+        pointLoads(i,j) = 0.5*(distroLoad(i,j)+distroLoad(i+1,j));
+        pointLoads(i+1,j) = pointLoads(i,j);
+    end
 end
 
 
-idBC = [1,2];
-idFree = [3:100];
 
-Kf          = K(idFree,idFree);
-Ff          = F(idFree);
-u(idFree)   = Kf^-1*Ff;          % displacement solution caused by F
+uY = zeros(ne,2);
 
-
+for j = 1:2
+    
+    
+    %assemble F
+    ind = 2:2:lenx*2;
+    for i = 1:ne+1        
+        F(ind(i)) = pointLoads(i,j);
+    end
+    idBC = [1,2];
+    idFree = (3:100);
+    
+    Kf          = K(idFree,idFree);
+    Ff          = F(idFree);
+    u(idFree)   = Kf^-1*Ff;          % displacement solution caused by F
+    
+    index=1;
+    for i = 2:2:100
+        uY(index,j)=u(i);
+        index=index+1;
+    end
+end
+maxDeflection = 0.1 *x(end);
 
 
 %% Step 6. Design the lightest wing that does not fail due to axial stresses, 
@@ -391,5 +412,130 @@ u(idFree)   = Kf^-1*Ff;          % displacement solution caused by F
 
 
 
+%%plotting
+
+if PLOT==true
+    %Example of discretised section
+    figure(2);
+    subplot(2,3,6);
+    hold on;
+    scatter(CS(1).WingBoxCornerXYZ(:,3),CS(1).WingBoxCornerXYZ(:,2),'filled')   %corners
+    line(CS(1).WingBoxCornerXYZ(:,3),CS(1).WingBoxCornerXYZ(:,2));
+    scatter(wingboxZs(1,:),wingboxCenters(1,:),'filled');                       %midpoints of elements
+    scatter(stringerZs(1,:),stringerCenters(1,:),'filled');
+    line([CS(1).WingBoxCornerXYZ(4,3),CS(1).WingBoxCornerXYZ(1,3)],[CS(1).WingBoxCornerXYZ(4,2),CS(1).WingBoxCornerXYZ(1,2)]);
+    for i = 1:length(CS(1).TopStringerXYZ)
+        line(CS(1).TopStringerXYZ{i}(:,3),CS(1).TopStringerXYZ{i}(:,2))
+        line(CS(1).BotStringerXYZ{i}(:,3),CS(1).BotStringerXYZ{i}(:,2))
+    end
+    legend('Wingbox Element Ends','Elements','Wingbox Element Midpoints','Stringer Element Midpoints','Location','best');
+    ylabel('Y position');
+    xlabel('X position');
+    grid on;
+    title('Example of descretized section');
+    hold off;
+    
+    %variation of properties
+    EIy = spline(1:nSpan,EIy,x);
+    EA = spline(1:nSpan,EA,x);
+    GJ = spline(1:nSpan,GJ,x);
+    LD = spline(1:nSpan,LD,x);
+    
+
+    hold on;
+    %EIzz plot
+    subplot(2,3,1);
+    plot(x,EIz);
+    grid on;
+    xlabel('Span location');
+    ylabel('EIzz');
+    title('Bending Stiffness about z-z');
+    
+    
+    %EIyy plot
+    subplot(2,3,2);
+    plot(x,EIy);
+    grid on;
+    xlabel('Span location');
+    ylabel('EIyy');
+    title('Bending Stiffness about y-y')
+    
+    %EA plot
+    subplot(2,3,3);
+    plot(x,EA);
+    grid on;
+    xlabel('Span Location');
+    ylabel('EA');
+    title('Axial Stiffness');
+    
+    %GJ plot
+    subplot(2,3,4);
+    plot(x,GJ);
+    grid on;
+    xlabel('Span Location');
+    ylabel('GJ')
+    title('Torsional Stiffness');
+    
+    %LD plot
+    subplot(2,3,5);
+    plot(x,LD);
+    grid on;
+    xlabel('Span Location');
+    ylabel('Linear Density');
+    title('Linear Density');
+    
+    
+    %Question 2 plot
+    figure(3);
+    subplot(2,1,1);
+    %shear force plot
+    hold on;
+    plot(x,Q(:,1));
+    plot(x,Q(:,2));
+    grid on;
+    xlabel('Span Location (m)');
+    ylabel('Internal Shear Force (N)');
+    legend('-1g','2.5g');
+    
+    hold off;
+    subplot(2,1,2);
+    hold on;
+    plot(x,BM(:,1));
+    plot(x,BM(:,2));
+    grid on;
+    xlabel('Span Location (m)');
+    ylabel('Internal Bending Moment (Nm)');
+    legend('-1g','2.5g');
+    
+    %Question 5 plotting
+    %plot of the forces and the point load equivalents
+    figure(6)
+    hold on;
+    plot(x,distroLoad);
+    plot(x,pointLoads);
+    yline(0);
+    grid on;
+    xlabel('Spanwise Location (m)');
+    ylabel('Resultant Force (N)');
+    legend('-1g','2.5g');
+    
+    figure(7);
+    hold on;
+    plot(x,uY,'LineStyle','--');
+    plot(x,gradient(uY(:,1)));
+    plot(x,gradient(uY(:,2)));
+    
+    
+    
+    
+    
+    
+    
+    
+    
+
+    
+
+end
 
 
