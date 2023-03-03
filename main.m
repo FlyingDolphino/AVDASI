@@ -519,13 +519,13 @@ if PLOT==true
     yyaxis right
     plot(x,gradient(uY(:,1)),'r','LineStyle','--');
     plot(x,gradient(uY(:,2)),'b','LineStyle','--');
-    legend('-1g Load Factor', '2.5g Load factor')
+    
     xlabel('Spanwise Location(m)')
     ylabel('Deflection rate');
     ylim([-1.5e-4,1.5e-4]);
     yline(0);
-
-    
+    legend('-1g Load Factor', '2.5g Load factor','Location','NorthWest')
+    title('Wing deflection (Solid lines) and Gradient (Dashed lines)')
     
     
     
