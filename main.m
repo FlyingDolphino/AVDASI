@@ -3,7 +3,7 @@ clear; close all; clc; format short g; format compact;
 set(0,'DefaultFigureWindowStyle','docked')
 
 nSpan = 10;     % number of span cross-section to model = number of ribs (constant)
-PLOT  = true;   % Boolean to turn plots on/off
+PLOT  = true ;   % Boolean to turn plots on/off
 
 
 %% Setup 1: Material definitions for Aluminium
@@ -321,7 +321,7 @@ gbuckling = [abs(sigmaMax)-spCrit, abs(sigmaMax)-plateCrit, abs(sigmaMax)-string
 %Will use the x coords given by the loadData as our nodes
 ne = lenx-1;    %number of elements
 nodes = x;
-Le = nodes(2)-nodes(1);
+Le = nodes(2) - nodes(1);
 eConn = zeros(ne,2);
 
 Ke = zeros(4,4,ne);
@@ -333,10 +333,10 @@ end
 
 for i=1:ne
     Ke(:,:,i) = EIz(i)/(Le^3)*[...
-       12   6*Le    -12     6*Le ;
-       6*Le     4*Le^2  -6*Le   2*Le^2 ;
-       -12  6*Le    12  -6*Le ;
-       6^Le     2*Le^2  -6*Le   4*Le^2]  ;
+       12   6*Le    -12     6*Le 
+       6*Le     4*Le^2  -6*Le   2*Le^2
+       12  6*Le    -12  6*Le
+       -6^Le     -2*Le^2  6*Le   4*Le^2]  ;
 end
 
 K = zeros(100,100); %50 nodes * 2DoFs
@@ -346,10 +346,10 @@ for i=1:ne
     id         = sort([nodeID*2-1 nodeID*2]); % index of dofs  linked to element i
     K(id,id)   = K(id,id) + Ke(:,:,i);        % add stiffnes of element i to global stiffness matrix
 end
+
 %Forces and boundary conditions
 F = zeros(lenx*2,1);
 u = zeros(lenx*2,1);
-
 
 
 %distro load needs to change
@@ -357,7 +357,7 @@ u = zeros(lenx*2,1);
 distroLoad = (aeroperL*loadFactor)-(massperL*g)-(wingboxL*g);
 
 
-pointLoads = zeros(lenx,1);
+pointLoads = zeros(lenx,2);
 for i = 1:2:lenx
     for j = 1:2
         pointLoads(i,j) = 0.5*(distroLoad(i,j)+distroLoad(i+1,j));
@@ -365,33 +365,19 @@ for i = 1:2:lenx
     end
 end
 
-
-
-uY = zeros(ne,2);
-
+uY = zeros(50,2);
+ind = 1;
 for j = 1:2
-    
-    
-    %assemble F
-    ind = 2:2:lenx*2;
-    for i = 1:ne+1        
-        F(ind(i)) = pointLoads(i,j);
-    end
+    F(2:2:100) = pointLoads(:,j);
     idBC = [1,2];
     idFree = (3:100);
-    
+
     Kf          = K(idFree,idFree);
     Ff          = F(idFree);
     u(idFree)   = Kf^-1*Ff;          % displacement solution caused by F
-    
-    index=1;
-    for i = 2:2:100
-        uY(index,j)=u(i);
-        index=index+1;
-    end
+    displ = reshape(u,2,[])';
+    uY(:,j) = displ(:,2);
 end
-maxDeflection = 0.1 *x(end);
-
 
 %% Step 6. Design the lightest wing that does not fail due to axial stresses, 
 % and remains below a given maximum deflection constraint
@@ -512,18 +498,33 @@ if PLOT==true
     figure(6)
     hold on;
     plot(x,distroLoad);
-    plot(x,pointLoads);
+    stem(x,pointLoads);
     yline(0);
     grid on;
     xlabel('Spanwise Location (m)');
     ylabel('Resultant Force (N)');
+    title('Plot of the distributed load and the point load equivalent')
     legend('-1g','2.5g');
     
     figure(7);
     hold on;
-    plot(x,uY,'LineStyle','--');
-    plot(x,gradient(uY(:,1)));
-    plot(x,gradient(uY(:,2)));
+    yyaxis left
+    plot(x,uY(:,1),'r');
+    plot(x,uY(:,2),'b','LineStyle','-');
+    ylabel('Deflection(m)');
+    ylim([-12e-4,12e-4]);
+    
+    
+    
+    yyaxis right
+    plot(x,gradient(uY(:,1)),'r','LineStyle','--');
+    plot(x,gradient(uY(:,2)),'b','LineStyle','--');
+    legend('-1g Load Factor', '2.5g Load factor')
+    xlabel('Spanwise Location(m)')
+    ylabel('Deflection rate');
+    ylim([-1.5e-4,1.5e-4]);
+    yline(0);
+
     
     
     
