@@ -3,7 +3,7 @@ clear; close all; clc; format short g; format compact;
 set(0,'DefaultFigureWindowStyle','docked')
 
 nSpan = 10;     % number of span cross-section to model = number of ribs (constant)
-PLOT  = true ;   % Boolean to turn plots on/off
+PLOT  = true;   % Boolean to turn plots on/off
 
 
 %% Setup 1: Material definitions for Aluminium
@@ -32,7 +32,7 @@ x.tSkin = [0   0.01
 x.tWeb  = [0   0.01    
            1   0.005]; 
 
-x.Stringer          = 4;         
+x.Stringer          = 8;         
 x.StringerHeight    = [0   0.05    
                        1   0.02]; 
 
@@ -61,6 +61,7 @@ stringerCenters = zeros(nSpan,8);
 stringerZs = zeros(nSpan,8);
 ymax = zeros(nSpan,1);
 ymin = zeros(nSpan,1);
+
 
 for n = 1:nSpan
 
@@ -134,10 +135,9 @@ for n = 1:nSpan
     
     %bottom stringer handling
     stringerNodes = CS(n).BotStringerXYZ;
-    nsB = length(stringerNodes);
-    for i= 5:ns+nsB
-        a = stringerNodes{i-4}(1,:);
-        b = stringerNodes{i-4}(2,:);
+    for i= (ns)+1:2*ns
+        a = stringerNodes{i-ns}(1,:);
+        b = stringerNodes{i-ns}(2,:);
         Ls(i) = norm(a-b);
         mid = (a+b)/2;
         ys(i) = mid(2);
@@ -187,6 +187,8 @@ for n = 1:nSpan
      %saving the elastic center (translated back to original coordinates)
      ye(n) = (1/EA(n))*yCS;
      ze(n) = (1/EA(n))*zCS;
+     
+
 
 end
 
@@ -263,9 +265,11 @@ sigmaVariation = yplot.*sigma(1);
 
 gyield = abs(sigmaMax)-276e6;
 
+
 % 4.2  Top and Bottom Skin Buckling
 L = 1;
 spCrit = zeros(nSpan,1);
+Iplates = zeros(nSpan,1);
 for n = 1:nSpan
     nodes = CS(n).WingBoxCornerXYZ;
     b = nodes(2,3)-nodes(1,3);
@@ -284,7 +288,8 @@ for n = 1:nSpan
     
     %finding centroid of panel
     centroid = ((boxCenter*abox)+4*(stringerCenter*astring))/(abox+astring*4);
-    I = (Ibox + abox*(boxCenter-centroid)^2)+4*(Istring+astring*(centroid-stringerCenter));
+    I = (Ibox + abox*(boxCenter-centroid)^2)+4*(Istring+astring*(centroid-stringerCenter)^2);
+    Iplates(n) = I;
     r = (I/(abox+astring))^0.5;
     spCrit(n) = pi^2*E/(L/r)^2;
 end
@@ -378,6 +383,7 @@ for j = 1:2
     displ = reshape(u,2,[])';
     uY(:,j) = displ(:,2);
 end
+
 
 %% Step 6. Design the lightest wing that does not fail due to axial stresses, 
 % and remains below a given maximum deflection constraint
