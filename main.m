@@ -4,7 +4,7 @@ set(0,'DefaultFigureWindowStyle','docked')
 
 nSpan = 10;     % number of span cross-section to model = number of ribs (constant)
 PLOT  = true;   % Boolean to turn plots on/off
-optimser = false; %turns the optimiser on and off
+optimiser = false; %turns the optimiser on and off
 
 
 %% Setup 1: Material definitions for Aluminium
