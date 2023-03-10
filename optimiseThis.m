@@ -25,8 +25,10 @@ function [wingmass] = optimiseThis(x0)
 
     x.tWeb  = [0   x0(3)    
                1   x0(4)]; 
-
-    x.Stringer          = round(x0(5));         
+    x.Stringer          = round(x0(5));  
+    if mod(x.Stringer,2) ~=0
+        x.Stringer = x.Stringer +1;
+    end         
     x.StringerHeight    = [0   x0(6)    
                            1   x0(7)]; 
 

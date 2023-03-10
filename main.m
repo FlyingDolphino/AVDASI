@@ -4,6 +4,7 @@ set(0,'DefaultFigureWindowStyle','docked')
 
 nSpan = 10;     % number of span cross-section to model = number of ribs (constant)
 PLOT  = true;   % Boolean to turn plots on/off
+optimser = false; %turns the optimiser on and off
 
 
 %% Setup 1: Material definitions for Aluminium
@@ -32,7 +33,7 @@ x.tSkin = [0   0.01
 x.tWeb  = [0   0.01    
            1   0.005]; 
 
-x.Stringer          = 8;         
+x.Stringer          = 4;         
 x.StringerHeight    = [0   0.05    
                        1   0.02]; 
 
@@ -249,7 +250,7 @@ ymin = spline(1:nSpan,ymin,x);
 
 
 sigma = E*(BM./EIz); %normalized to y.
-sigmaMax = sigma(:,2).*ymax;
+sigmaMax = sigma.*ymax;
 sigmaMin = sigma.*ymin;
 
 yplot = linspace(ymin(1),ymax(1));
@@ -263,7 +264,7 @@ sigmaVariation = yplot.*sigma(1);
 %% Step 4. Compute failure caused by axial stresses
 % 4.1  Yield (element per element based on max sigma_xx)
 
-gyield = abs(sigmaMax)-276e6;
+gyield = abs(sigmaMax(:,2))-276e6;
 
 
 % 4.2  Top and Bottom Skin Buckling
@@ -316,8 +317,8 @@ end
 
 %check step
 
-sigmaMax = spline(x,sigmaMax,(1:nSpan).');
-gbuckling = [abs(sigmaMax)-spCrit, abs(sigmaMax)-plateCrit, abs(sigmaMax)-stringerCrit];
+max = spline(x,sigmaMax(:,2),(1:nSpan).');
+gbuckling = [abs(max)-spCrit, abs(max)-plateCrit, abs(max)-stringerCrit];
 
 
 
@@ -388,8 +389,11 @@ end
 %% Step 6. Design the lightest wing that does not fail due to axial stresses, 
 % and remains below a given maximum deflection constraint
 
+if optimiser == true
+    xopt = optimize();
+end
 
-
+    
 
 
 %% Step 7. Compute shear stresses caused by bending
@@ -498,6 +502,33 @@ if PLOT==true
     xlabel('Span Location (m)');
     ylabel('Internal Bending Moment (Nm)');
     legend('-1g','2.5g');
+    
+    
+    %question 3 plot
+    figure(4)
+    plot(sigmaVariation,yplot);
+    grid on;
+    xlabel('Stress');
+    ylabel('Y coordinate in cross section');
+    title('Stress variation with y coordinate of 1st rib');
+    
+    figure(5)
+    hold on;
+    grid on;
+    plot(x,sigmaMax(:,1),'k');
+    plot(x,sigmaMax(:,2),'r');
+    plot(x,sigmaMin(:,1),'k');
+    plot(x,sigmaMin(:,2),'r');
+    legend('-1g load','2.5g load');
+    title('Maximum Tensile and Compressive stress along the span')
+    xlabel('Span (m)')
+    ylabel('Stress (Pa)');
+    %question 4 plots
+    
+    
+    
+    
+    
     
     %Question 5 plotting
     %plot of the forces and the point load equivalents

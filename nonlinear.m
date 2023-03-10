@@ -1,4 +1,4 @@
-function[c, ceq] = wingparameters(x0)
+function[c, ceq] = nonlinear(x0)
 
     nSpan = 10;     % number of span cross-section to model = number of ribs (constant)
     PLOT  = false ;   % Boolean to turn plots on/off
@@ -29,8 +29,15 @@ function[c, ceq] = wingparameters(x0)
 
     x.tWeb  = [0   x0(3)    
                1   x0(4)]; 
+       
 
-    x.Stringer          = round(x0(5));         
+    x.Stringer          = round(x0(5));  
+    if mod(x.Stringer,2) ~=0
+        x.Stringer = x.Stringer +1;
+    end
+    
+
+
     x.StringerHeight    = [0   x0(6)    
                            1   x0(7)]; 
 
@@ -43,6 +50,7 @@ function[c, ceq] = wingparameters(x0)
     % access, say the web thickness of the 2nd cross-section, you can type 
     % CS(2).tWeb
     CS = WingParameterisation(x,nSpan,PLOT); 
+   
 
     %% Step 1. Discretised cross-sections and approximate cross-section properties 
 
@@ -367,7 +375,7 @@ function[c, ceq] = wingparameters(x0)
         displ = reshape(u,2,[])';
         uY(:,j) = displ(:,2);
     end
-    tipdeflection = max(abs(uY(:,2)));
+    tipdeflection = max(abs(uY(:,2)))-1;
     gyield = spline(x,gyield,1:nSpan).';
     
     c = [gbuckling(:);gyield(:);tipdeflection(:)];
