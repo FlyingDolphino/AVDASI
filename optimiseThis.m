@@ -59,6 +59,7 @@ function [wingmass] = optimiseThis(x0)
     ymin = zeros(nSpan,1);
 
 
+   
     for n = 1:nSpan
 
         nodes = CS(n).WingBoxCornerXYZ;
@@ -66,7 +67,8 @@ function [wingmass] = optimiseThis(x0)
 
         ymax(n) = max(nodes(:,1));          %max and min y values of each rib. Needed for max and min stresses later
         ymin(n) = min(nodes(:,1));
-        t = CS(n).tSkin;
+        tSkin = CS(n).tSkin;
+        tWeb = CS(n).tWeb;
         ne = length(nodes);
         L = zeros(1,ne);
         y = zeros(1,ne);
@@ -99,15 +101,17 @@ function [wingmass] = optimiseThis(x0)
             end
         end
 
-        area = 0;
         Izz = 0;
         Iyy = 0;
+        Iz = 0;
 
         %summing the area and Izz, Iyy contributions of the box
+
+        area = 2*max(L)*tSkin + 2*min(L)*tWeb;
         for i =1:ne                             
-            area = area + t*L(i);
-            Izz = Izz + y(i)^2.*t*L(i);
-            Iyy = Iyy + z(i)^2.*t*L(i);
+            Izz = Izz + y(i)^2.*tWeb*L(i);
+            Iyy = Iyy + z(i)^2.*tSkin*L(i);
+            Iz = Iz + z(i).*tSkin*L(i);
         end
 
         %top stringer handling
@@ -142,6 +146,7 @@ function [wingmass] = optimiseThis(x0)
             stringerZs(n,i) = zs(i);
         end
 
+
         Sarea = 0;
         SIzz = 0;
         SIyy = 0;
@@ -164,14 +169,13 @@ function [wingmass] = optimiseThis(x0)
          EA(n) = E*area;
          GJ(n) = G*J;
          LD(n) = area*rho;
-         
 
          %centroid and elastic center
          yCS = 0;
          zCS = 0;
          for i = 1:ne
-             yCS = yCS+ E*y(i)*L(i)*t;
-             zCS = zCS+ E*z(i)*L(i)*t;
+             yCS = yCS+ E*y(i)*L(i)*tSkin;
+             zCS = zCS+ E*z(i)*L(i)*tWeb;
          end
          for i = 1:tots
              yCS = yCS + E*ys(i)*Ls(i)*ts;

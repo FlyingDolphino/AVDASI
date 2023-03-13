@@ -28,10 +28,10 @@ function[xopt] = optimize()
     lb = [0 0 0 0 2 0 0 0 0];
     ub = [0.1 0.1 0.1 0.1 16 0.2 0.2 0.1 0.1];
 
-
-
-    options = optimoptions(@fmincon,'Display','iter','MaxFunctionEvaluations',4e3);
-    [xopt, fval] = fmincon(@optimiseThis,x0,[],[],[],[],lb,ub,@nonlinear,options);
+    LoadData = xlsread('Load.xlsx'); %#ok<XLSRD> 
+    nonlcon = @(x) nonlinear(x, LoadData);
+    options = optimoptions(@fmincon,'Display','iter','MaxFunctionEvaluations',4e10,'MaxIterations',5e10);
+    [xopt, fval] = fmincon(@optimiseThis,x0,[],[],[],[],lb,ub,nonlcon,options);
     
 end
 

@@ -62,6 +62,10 @@ stringerCenters = zeros(nSpan,8);
 stringerZs = zeros(nSpan,8);
 ymax = zeros(nSpan,1);
 ymin = zeros(nSpan,1);
+zmax = zeros(nSpan,1);
+zmin = zeros(nSpan,1);
+secondMoment = zeros(nSpan,1);
+
 
 
 for n = 1:nSpan
@@ -71,7 +75,10 @@ for n = 1:nSpan
 
     ymax(n) = max(nodes(:,1));          %max and min y values of each rib. Needed for max and min stresses later
     ymin(n) = min(nodes(:,1));
-    t = CS(n).tSkin;
+    zmax(n) = max(nodes(:,2));
+    zmin(n) = min(nodes(:,2));
+    tSkin = CS(n).tSkin;
+    tWeb = CS(n).tWeb;
     ne = length(nodes);
     L = zeros(1,ne);
     y = zeros(1,ne);
@@ -104,17 +111,25 @@ for n = 1:nSpan
         end
     end
 
-    area = 0;
     Izz = 0;
     Iyy = 0;
 
+
     %summing the area and Izz, Iyy contributions of the box
-    for i =1:ne                             
-        area = area + t*L(i);
-        Izz = Izz + y(i)^2.*t*L(i);
-        Iyy = Iyy + z(i)^2.*t*L(i);
+    
+    area = 2*max(L)*tSkin + 2*min(L)*tWeb;
+    for i =1:ne
+        if mod(i,2) == 0 
+            Izz = Izz + y(i)^2.*tWeb*L(i);
+            Iyy = Iyy + z(i)^2.*tWeb*L(i);
+        else
+            Iyy = Iyy + z(i)^2.*tSkin*L(i);
+            Izz = Izz + y(i)^2.*tSkin*L(i);
+        end
+        
     end
     
+    secondMoment(n)=Izz;
     %top stringer handling
     stringerNodes = CS(n).TopStringerXYZ;
     ts = CS(n).StringerThickness;
@@ -175,8 +190,8 @@ for n = 1:nSpan
      yCS = 0;
      zCS = 0;
      for i = 1:ne
-         yCS = yCS+ E*y(i)*L(i)*t;
-         zCS = zCS+ E*z(i)*L(i)*t;
+         yCS = yCS+ E*y(i)*L(i)*tSkin;
+         zCS = zCS+ E*z(i)*L(i)*tWeb;
      end
      for i = 1:tots
          yCS = yCS + E*ys(i)*Ls(i)*ts;
@@ -192,10 +207,6 @@ for n = 1:nSpan
 
 
 end
-
-
-
-
 
 
 %% Step 2. Wing loads, internal shear and bending moments
@@ -317,8 +328,8 @@ end
 
 %check step
 
-max = spline(x,sigmaMax(:,2),(1:nSpan).');
-gbuckling = [abs(max)-spCrit, abs(max)-plateCrit, abs(max)-stringerCrit];
+maxsigma = spline(x,sigmaMax(:,2),(1:nSpan).');
+gbuckling = [abs(maxsigma)-spCrit, abs(maxsigma)-plateCrit, abs(maxsigma)-stringerCrit];
 
 
 
@@ -398,13 +409,57 @@ end
 
 %% Step 7. Compute shear stresses caused by bending
 
+Q1 = spline(x,Q(:,1),1:nSpan);
+Q2 = spline(x,Q(:,2),1:nSpan);
+V = [Q1;Q2]';
+qstress = zeros(nSpan,298);
+arclength = zeros(nSpan,298);
+maxShear = zeros(nSpan,2);
+minShear = zeros(nSpan,2);
 
+for j = 1:2
+    for n = 1:nSpan
+        
+        tSkin = CS(n).tSkin;
+        tWeb = CS(n).tWeb;
+        
+        z_length = linspace(0,zmax(n));
+        y_length = linspace(0,ymax(n));
+        
+
+        Qtop = tSkin*ymax(n)*z_length;
+        qtop = V(n,j).*Qtop./(secondMoment(n)*tSkin);
+        
+        Qside = tWeb*y_length.*(ymax(n)-y_length);
+        qside = qtop(end) + V(n,j).*Qside./(secondMoment(n)*tWeb);
+        
+        %join together
+        qstress(n,:) = [qtop(1:end-1) qside(1:end-1) fliplr(qtop)];
+
+        arc = [z_length(1:end-1) y_length+z_length(end)];
+        arclength(n,:) = [arc(1:end-1) z_length+arc(end)];
+        
+        
+        maxShear(n,j) = max(abs(qstress(n,:)));
+        minShear(n,j) = -maxShear(n,j);
+   
+    end
+end
 
 %% Step 8. Compute failure caused by combined shear and axial stresses
 
 
 %% Step 9. Design the lightest wing able to resist failure due to axial and shear stresses,  
 % and remains below a given maximum deflection constraints
+
+
+
+
+
+
+
+
+
 
 
 
@@ -508,9 +563,10 @@ if PLOT==true
     figure(4)
     plot(sigmaVariation,yplot);
     grid on;
-    xlabel('Stress');
+    xline(0)
+    xlabel('Stress (Pa)');
     ylabel('Y coordinate in cross section');
-    title('Stress variation with y coordinate of 1st rib');
+    title('Stress Variation with Y, 1st Rib -1g Loading');
     
     figure(5)
     hold on;
@@ -520,7 +576,7 @@ if PLOT==true
     plot(x,sigmaMin(:,1),'k');
     plot(x,sigmaMin(:,2),'r');
     legend('-1g load','2.5g load');
-    title('Maximum Tensile and Compressive stress along the span')
+    title('Maximum and Minimum Axial Stress Along The Span')
     xlabel('Span (m)')
     ylabel('Stress (Pa)');
     %question 4 plots
@@ -567,9 +623,34 @@ if PLOT==true
     
     
     
+    figure(8)
+    plot(arclength(1,:),qstress(1,:))
+    title('Shear Stress Variation of top and bottom surface of 1st rib');
+    xlabel('Arc length, increasing clockwise (m)')
+    ylabel('Magnitude of Shear Stress (Pa)')
+    xline(zmax(1));
+    xline(zmax(1)+ymax(1));
+    ylim([0 17e6]);
+    txt = 'Half of Top surface';
+    text(0.6,16e6,txt,'HorizontalAlignment','right','FontSize',12)
+    txt = 'Right Surface';
+    text(0.85,16e6,txt,'FontSize',12);
+    txt = 'Half of Bottom Surface';
+    text(1.8,16e6,txt,'HorizontalAlignment','right','FontSize',12)
     
     
+    figure(9)
     
+    hold on;
+    grid on;
+    plot(1:nSpan,maxShear(:,1),'k');
+    plot(1:nSpan,maxShear(:,2),'r');
+    plot(1:nSpan,minShear(:,1),'k');
+    plot(1:nSpan,minShear(:,2),'r');
+    legend('-1g load','2.5g load');
+    title('Maximum and Miminum Shear Stress Along The Span')
+    xlabel('Span (m)')
+    ylabel('Shear Stress (Pa)');
     
 
     

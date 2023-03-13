@@ -1,4 +1,4 @@
-function[c, ceq] = nonlinear(x0)
+function[c, ceq] = nonlinear(x0,LoadData)
 
     nSpan = 10;     % number of span cross-section to model = number of ribs (constant)
     PLOT  = false ;   % Boolean to turn plots on/off
@@ -69,6 +69,7 @@ function[c, ceq] = nonlinear(x0)
     ymin = zeros(nSpan,1);
 
 
+
     for n = 1:nSpan
 
         nodes = CS(n).WingBoxCornerXYZ;
@@ -76,7 +77,9 @@ function[c, ceq] = nonlinear(x0)
 
         ymax(n) = max(nodes(:,1));          %max and min y values of each rib. Needed for max and min stresses later
         ymin(n) = min(nodes(:,1));
-        t = CS(n).tSkin;
+
+        tSkin = CS(n).tSkin;
+        tWeb = CS(n).tWeb;
         ne = length(nodes);
         L = zeros(1,ne);
         y = zeros(1,ne);
@@ -109,16 +112,19 @@ function[c, ceq] = nonlinear(x0)
             end
         end
 
-        area = 0;
         Izz = 0;
         Iyy = 0;
+        Iz = 0;
 
         %summing the area and Izz, Iyy contributions of the box
+
+        area = 2*max(L)*tSkin + 2*min(L)*tWeb;
         for i =1:ne                             
-            area = area + t*L(i);
-            Izz = Izz + y(i)^2.*t*L(i);
-            Iyy = Iyy + z(i)^2.*t*L(i);
+            Izz = Izz + y(i)^2.*tWeb*L(i);
+            Iyy = Iyy + z(i)^2.*tSkin*L(i);
+            Iz = Iz + z(i).*tSkin*L(i);
         end
+
 
         %top stringer handling
         stringerNodes = CS(n).TopStringerXYZ;
@@ -141,7 +147,6 @@ function[c, ceq] = nonlinear(x0)
 
         %bottom stringer handling
         stringerNodes = CS(n).BotStringerXYZ;
-      
         for i= (ns)+1:2*ns
             a = stringerNodes{i-ns}(1,:);
             b = stringerNodes{i-ns}(2,:);
@@ -181,8 +186,8 @@ function[c, ceq] = nonlinear(x0)
          yCS = 0;
          zCS = 0;
          for i = 1:ne
-             yCS = yCS+ E*y(i)*L(i)*t;
-             zCS = zCS+ E*z(i)*L(i)*t;
+             yCS = yCS+ E*y(i)*L(i)*tSkin;
+             zCS = zCS+ E*z(i)*L(i)*tWeb;
          end
          for i = 1:tots
              yCS = yCS + E*ys(i)*Ls(i)*ts;
@@ -203,9 +208,8 @@ function[c, ceq] = nonlinear(x0)
 
 
 
-
     %% Step 2. Wing loads, internal shear and bending moments
-    LoadData = xlsread('Load.xlsx'); %#ok<XLSRD> 
+    %LoadData = xlsread('Load.xlsx'); %#ok<XLSRD> 
 
 
     g = 9.81;
