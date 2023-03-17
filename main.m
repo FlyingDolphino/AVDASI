@@ -1,10 +1,10 @@
 % Main starting code
 clear; close all; clc; format short g; format compact;
 set(0,'DefaultFigureWindowStyle','docked')
-
+set(0,'defaultAxesFontSize',20)
 nSpan = 10;     % number of span cross-section to model = number of ribs (constant)
-PLOT  = false;   % Boolean to turn plots on/off
-optimiser = true; %turns the optimiser on and off
+PLOT  = true;   % Boolean to turn plots on/off
+optimiser = false; %turns the optimiser on and off
 
 
 %% Setup 1: Material definitions for Aluminium
@@ -27,18 +27,18 @@ x.BoxGeo = [0  0.2   0.5;
             0.5 0.2  0.5;
             1  0.2   0.35]; 
 
-x.tSkin = [0   0.03    
+x.tSkin = [0   0.01     
            1   0.005]; 
 
-x.tWeb  = [0   0.03   
+x.tWeb  = [0   0.01    
            1   0.005]; 
 
 x.Stringer          = 4;         
-x.StringerHeight    = [0   0.05   
+x.StringerHeight    = [0   0.05    
                        1   0.02]; 
 
 x.StringerThickness = [0   0.003 ;
-                       1   0.002]; 
+                       1   0.002];  
 
 % CS is an array of 10 structures containing the geometric information
 % relevant to each of the 10 cross-sections along the span. To view, say
@@ -671,11 +671,11 @@ if PLOT==true
     ylim([0 18e6]);
     xlim([0 2.06]);
     txt = 'Half of Top surface';
-    text(0.6,17e6,txt,'HorizontalAlignment','right','FontSize',12)
+    text(0.6,17e6,txt,'HorizontalAlignment','right','FontSize',20)
     txt = 'Right Surface';
-    text(0.95,17e6,txt,'FontSize',12);
+    text(0.95,17e6,txt,'FontSize',20);
     txt = 'Half of Bottom Surface';
-    text(1.8,17e6,txt,'HorizontalAlignment','right','FontSize',12)
+    text(1.8,17e6,txt,'HorizontalAlignment','right','FontSize',20)
     
     
     figure(12)
