@@ -1,4 +1,4 @@
-function [wingmass] = optimiseThis(x0)
+function [wingmass] = optimiseThis(x0,stringer)
 
     
     %% Setup 1: Material definitions for Aluminium
@@ -25,15 +25,13 @@ function [wingmass] = optimiseThis(x0)
 
     x.tWeb  = [0   x0(3)    
                1   x0(4)]; 
-    x.Stringer          = round(x0(5));  
-    if mod(x.Stringer,2) ~=0
-        x.Stringer = x.Stringer +1;
-    end         
-    x.StringerHeight    = [0   x0(6)    
-                           1   x0(7)]; 
+    x.Stringer          = stringer;  
+    
+    x.StringerHeight    = [0   x0(5)    
+                           1   x0(6)]; 
 
-    x.StringerThickness = [0   x0(8) ;
-                           1   x0(9)]; 
+    x.StringerThickness = [0   x0(7) ;
+                           1   x0(8)]; 
 
     % CS is an array of 10 structures containing the geometric information
     % relevant to each of the 10 cross-sections along the span. To view, say

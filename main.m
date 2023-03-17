@@ -3,8 +3,8 @@ clear; close all; clc; format short g; format compact;
 set(0,'DefaultFigureWindowStyle','docked')
 
 nSpan = 10;     % number of span cross-section to model = number of ribs (constant)
-PLOT  = true;   % Boolean to turn plots on/off
-optimiser = false; %turns the optimiser on and off
+PLOT  = false;   % Boolean to turn plots on/off
+optimiser = true; %turns the optimiser on and off
 
 
 %% Setup 1: Material definitions for Aluminium
@@ -27,14 +27,14 @@ x.BoxGeo = [0  0.2   0.5;
             0.5 0.2  0.5;
             1  0.2   0.35]; 
 
-x.tSkin = [0   0.01     
+x.tSkin = [0   0.03    
            1   0.005]; 
 
-x.tWeb  = [0   0.01    
+x.tWeb  = [0   0.03   
            1   0.005]; 
 
 x.Stringer          = 4;         
-x.StringerHeight    = [0   0.05    
+x.StringerHeight    = [0   0.05   
                        1   0.02]; 
 
 x.StringerThickness = [0   0.003 ;
@@ -268,7 +268,15 @@ yplot = linspace(ymin(1),ymax(1));
 sigmaVariation = yplot.*sigma(1);
 
 
+%%transverse stresses caused by bending
+EIy = spline(1:nSpan,EIy,x);
+zmax = spline(1:nSpan,zmax,x);
+zmin = spline(1:nSpan,zmin,x);
 
+
+sigmayy = E*(BM./EIy);
+sigmayyMax = sigmayy.*zmax;
+sigmayyMin = sigmayy.*zmin;
 
 
 
@@ -400,9 +408,8 @@ end
 %% Step 6. Design the lightest wing that does not fail due to axial stresses, 
 % and remains below a given maximum deflection constraint
 
-if optimiser == true
-    xopt = optimize();
-end
+%see after plotting
+
 
     
 
@@ -448,19 +455,24 @@ end
 
 %% Step 8. Compute failure caused by combined shear and axial stresses
 
+%principal stresses
+tau_max = zeros(length(x),2);
+tau_max(:,1) = spline(1:nSpan,maxShear(:,1),x);
+tau_max(:,2)  = spline(1:nSpan,maxShear(:,2),x);
+
+sigma1 = (sigmaMax + sigmaMin) / 2 + sqrt(((sigmaMax - sigmaMin) / 2).^2 + tau_max.^2);
+sigma2 = (sigmaMax + sigmaMin) / 2 - sqrt(((sigmaMax - sigmaMin) / 2).^2 + tau_max.^2);
+
+vonMises = sqrt(0.5*((sigmaMax - sigmaMin).^2 + 3*tau_max.^2));
+vonMises2 = sqrt(sigma1.^2 - sigma1.*sigma2 + sigma2.^2 + 3*tau_max.^2);
+
+
+vonFail = vonMises2 - YieldStrength;
+
 
 %% Step 9. Design the lightest wing able to resist failure due to axial and shear stresses,  
 % and remains below a given maximum deflection constraints
-
-
-
-
-
-
-
-
-
-
+%see after plotting
 
 
 %%plotting
@@ -487,7 +499,7 @@ if PLOT==true
     hold off;
     
     %variation of properties
-    EIy = spline(1:nSpan,EIy,x);
+    
     EA = spline(1:nSpan,EA,x);
     GJ = spline(1:nSpan,GJ,x);
     LD = spline(1:nSpan,LD,x);
@@ -498,8 +510,8 @@ if PLOT==true
     subplot(2,3,1);
     plot(x,EIz);
     grid on;
-    xlabel('Span location');
-    ylabel('EIzz');
+    xlabel('Span location (m)');
+    ylabel('EIzz (Nm^4)');
     title('Bending Stiffness about z-z');
     
     
@@ -507,16 +519,16 @@ if PLOT==true
     subplot(2,3,2);
     plot(x,EIy);
     grid on;
-    xlabel('Span location');
-    ylabel('EIyy');
+    xlabel('Span location (m)');
+    ylabel('EIyy (Nm^4)');
     title('Bending Stiffness about y-y')
     
     %EA plot
     subplot(2,3,3);
     plot(x,EA);
     grid on;
-    xlabel('Span Location');
-    ylabel('EA');
+    xlabel('Span Location (m)');
+    ylabel('EA (N)');
     title('Axial Stiffness');
     
     %GJ plot
@@ -524,21 +536,20 @@ if PLOT==true
     plot(x,GJ);
     grid on;
     xlabel('Span Location');
-    ylabel('GJ')
+    ylabel('GJ (Nm^2)')
     title('Torsional Stiffness');
     
     %LD plot
     subplot(2,3,5);
     plot(x,LD);
     grid on;
-    xlabel('Span Location');
-    ylabel('Linear Density');
+    xlabel('Span Location (m)');
+    ylabel('Linear Density (kg/m)');
     title('Linear Density');
-    
-    
+    f = figure;
+
     %Question 2 plot
     figure(3);
-    subplot(2,1,1);
     %shear force plot
     hold on;
     plot(x,Q(:,1));
@@ -547,9 +558,9 @@ if PLOT==true
     xlabel('Span Location (m)');
     ylabel('Internal Shear Force (N)');
     legend('-1g','2.5g');
-    
-    hold off;
-    subplot(2,1,2);
+
+
+    figure(4)
     hold on;
     plot(x,BM(:,1));
     plot(x,BM(:,2));
@@ -557,10 +568,10 @@ if PLOT==true
     xlabel('Span Location (m)');
     ylabel('Internal Bending Moment (Nm)');
     legend('-1g','2.5g');
-    
+
     
     %question 3 plot
-    figure(4)
+    figure(5)
     plot(sigmaVariation,yplot);
     grid on;
     xline(0)
@@ -568,7 +579,7 @@ if PLOT==true
     ylabel('Y coordinate in cross section');
     title('Stress Variation with Y, 1st Rib -1g Loading');
     
-    figure(5)
+    figure(6)
     hold on;
     grid on;
     plot(x,sigmaMax(:,1),'k');
@@ -579,16 +590,35 @@ if PLOT==true
     title('Maximum and Minimum Axial Stress Along The Span')
     xlabel('Span (m)')
     ylabel('Stress (Pa)');
+    
+    
+    
     %question 4 plots
+    spCrit = gbuckling(:,1);
+    plateCrit = gbuckling(:,2);
+    stringCrit = gbuckling(:,3);
+    gyield = spline(x,gyield,1:nSpan);
+    
+    figure(7)
+    hold on
+    grid on
+    plot(1:nSpan,spCrit,'k','LineStyle','--','LineWidth',1.5)
+    plot(1:nSpan,plateCrit,'k','LineStyle',':','LineWidth',1.5)
+    plot(1:nSpan,stringCrit,'k','LineStyle','-.','LineWidth',1.5)
+    plot(1:nSpan,gyield,'k','LineWidth',1.5)
+    ylabel('Failiure Indices (Pa)')
+    xlabel('Span location (m)')
+    ylim([-0.5e9 0.25e9])
+    yline(0,'r')
+    legend('Top and Bottom Column Buckling','Plate Buckling Between Stringers','Stringers Buckling','Yield');
+    title('Failiure Indices, Positive Means Failiure')
     
     
-    
-    
-    
+   
     
     %Question 5 plotting
     %plot of the forces and the point load equivalents
-    figure(6)
+    figure(8)
     hold on;
     plot(x,distroLoad);
     stem(x,pointLoads);
@@ -599,7 +629,7 @@ if PLOT==true
     title('Plot of the distributed load and the point load equivalent')
     legend('-1g','2.5g');
     
-    figure(7);
+    figure(9);
     hold on;
     yyaxis left
     plot(x,uY(:,1),'r');
@@ -621,25 +651,34 @@ if PLOT==true
     title('Wing deflection (Solid lines) and Gradient (Dashed lines)')
     
     
+    figure(10)
+    plot(x,vonFail);
+    yline(0);
+    title('Von Mises Failure Indices for Both Load Cases')
+    ylabel('Von Mises Failure Indices (Pa)')
+    xlabel('Span location (m)')
+    legend('-1g Load', '2.5g Load')
     
     
-    figure(8)
+    
+    figure(11)
     plot(arclength(1,:),qstress(1,:))
     title('Shear Stress Variation of top and bottom surface of 1st rib');
     xlabel('Arc length, increasing clockwise (m)')
     ylabel('Magnitude of Shear Stress (Pa)')
     xline(zmax(1));
     xline(zmax(1)+ymax(1));
-    ylim([0 17e6]);
+    ylim([0 18e6]);
+    xlim([0 2.06]);
     txt = 'Half of Top surface';
-    text(0.6,16e6,txt,'HorizontalAlignment','right','FontSize',12)
+    text(0.6,17e6,txt,'HorizontalAlignment','right','FontSize',12)
     txt = 'Right Surface';
-    text(0.85,16e6,txt,'FontSize',12);
+    text(0.95,17e6,txt,'FontSize',12);
     txt = 'Half of Bottom Surface';
-    text(1.8,16e6,txt,'HorizontalAlignment','right','FontSize',12)
+    text(1.8,17e6,txt,'HorizontalAlignment','right','FontSize',12)
     
     
-    figure(9)
+    figure(12)
     
     hold on;
     grid on;
@@ -652,9 +691,32 @@ if PLOT==true
     xlabel('Span (m)')
     ylabel('Shear Stress (Pa)');
     
+    figure(13)
+    vonPlot = spline(x,vonFail(:,2),1:nSpan);
+    
+    
+    hold on
+    grid on
+    plot(1:nSpan,spCrit,'k','LineStyle','--','LineWidth',1.5)
+    plot(1:nSpan,plateCrit,'k','LineStyle',':','LineWidth',1.5)
+    plot(1:nSpan,stringCrit,'k','LineStyle','-.','LineWidth',1.5)
+    plot(1:nSpan,gyield,'k','LineWidth',1.5)
+    plot(1:nSpan,vonPlot,'b','LineWidth',1.5);
+    ylabel('Failiure Indices (Pa)')
+    xlabel('Span location (m)')
+    ylim([-0.5e9 0.25e9])
+    yline(0,'r')
+    legend('Top and Bottom Column Buckling','Plate Buckling Between Stringers','Stringers Buckling','Yield','Von Mises');
+    title('Failiure Indices, Positive Means Failiure')
 
     
 
+end
+
+%optimising
+if optimiser == true
+    xopt = optimize(false);
+    xoptWithShear = optimize(true);
 end
 
 

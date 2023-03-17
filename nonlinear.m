@@ -1,4 +1,4 @@
-function[c, ceq] = nonlinear(x0,LoadData)
+function[c, ceq] = nonlinear(x0,LoadData,stringer)
 
     nSpan = 10;     % number of span cross-section to model = number of ribs (constant)
     PLOT  = false ;   % Boolean to turn plots on/off
@@ -31,18 +31,13 @@ function[c, ceq] = nonlinear(x0,LoadData)
                1   x0(4)]; 
        
 
-    x.Stringer          = round(x0(5));  
-    if mod(x.Stringer,2) ~=0
-        x.Stringer = x.Stringer +1;
-    end
-    
+    x.Stringer          = stringer;  
 
+    x.StringerHeight    = [0   x0(5)    
+                           1   x0(6)]; 
 
-    x.StringerHeight    = [0   x0(6)    
-                           1   x0(7)]; 
-
-    x.StringerThickness = [0   x0(8) ;
-                           1   x0(9)];
+    x.StringerThickness = [0   x0(7) ;
+                           1   x0(8)];
 
     % CS is an array of 10 structures containing the geometric information
     % relevant to each of the 10 cross-sections along the span. To view, say
@@ -51,8 +46,6 @@ function[c, ceq] = nonlinear(x0,LoadData)
     % CS(2).tWeb
     CS = WingParameterisation(x,nSpan,PLOT); 
    
-
-    %% Step 1. Discretised cross-sections and approximate cross-section properties 
 
     EA = zeros(nSpan,1);
     EIz = zeros(nSpan,1);
@@ -67,6 +60,9 @@ function[c, ceq] = nonlinear(x0,LoadData)
     stringerZs = zeros(nSpan,8);
     ymax = zeros(nSpan,1);
     ymin = zeros(nSpan,1);
+    zmax = zeros(nSpan,1);
+    zmin = zeros(nSpan,1);
+    secondMoment = zeros(nSpan,1);
 
 
 
@@ -77,7 +73,8 @@ function[c, ceq] = nonlinear(x0,LoadData)
 
         ymax(n) = max(nodes(:,1));          %max and min y values of each rib. Needed for max and min stresses later
         ymin(n) = min(nodes(:,1));
-
+        zmax(n) = max(nodes(:,2));
+        zmin(n) = min(nodes(:,2));
         tSkin = CS(n).tSkin;
         tWeb = CS(n).tWeb;
         ne = length(nodes);
@@ -114,18 +111,23 @@ function[c, ceq] = nonlinear(x0,LoadData)
 
         Izz = 0;
         Iyy = 0;
-        Iz = 0;
+
 
         %summing the area and Izz, Iyy contributions of the box
 
         area = 2*max(L)*tSkin + 2*min(L)*tWeb;
-        for i =1:ne                             
-            Izz = Izz + y(i)^2.*tWeb*L(i);
-            Iyy = Iyy + z(i)^2.*tSkin*L(i);
-            Iz = Iz + z(i).*tSkin*L(i);
+        for i =1:ne
+            if mod(i,2) == 0 
+                Izz = Izz + y(i)^2.*tWeb*L(i);
+                Iyy = Iyy + z(i)^2.*tWeb*L(i);
+            else
+                Iyy = Iyy + z(i)^2.*tSkin*L(i);
+                Izz = Izz + y(i)^2.*tSkin*L(i);
+            end
+
         end
 
-
+        secondMoment(n)=Izz;
         %top stringer handling
         stringerNodes = CS(n).TopStringerXYZ;
         ts = CS(n).StringerThickness;
@@ -203,7 +205,6 @@ function[c, ceq] = nonlinear(x0,LoadData)
 
 
     end
-
 
 
 
@@ -381,6 +382,7 @@ function[c, ceq] = nonlinear(x0,LoadData)
     end
     tipdeflection = max(abs(uY(:,2)))-1;
     gyield = spline(x,gyield,1:nSpan).';
+
     
     c = [gbuckling(:);gyield(:);tipdeflection(:)];
     ceq=[];
